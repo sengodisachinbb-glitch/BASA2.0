@@ -1,0 +1,236 @@
+name: Sync Upstream & Release BASA
+
+on:
+  schedule:
+    # Check parent repo for updates daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build and publish release even if already released'
+        required: false
+        type: boolean
+        default: false
+      parent_repo:
+        description: 'Parent upstream repository'
+        required: false
+        type: string
+        default: 'kushagrasinghx/BitChord'
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Parent Upstream Release
+        id: upstream_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARENT_REPO: ${{ inputs.parent_repo || 'kushagrasinghx/BitChord' }}
+        run: |
+          echo "Checking latest release from $PARENT_REPO..."
+          LATEST_PARENT_JSON=$(gh api "repos/$PARENT_REPO/releases/latest" 2>/dev/null || echo "{}")
+          PARENT_TAG=$(echo "$LATEST_PARENT_JSON" | jq -r '.tag_name // empty')
+          PARENT_BODY=$(echo "$LATEST_PARENT_JSON" | jq -r '.body // empty')
+
+          if [ -z "$PARENT_TAG" ]; then
+            echo "No upstream release found or rate limit encountered."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Parent latest release tag: $PARENT_TAG"
+          echo "upstream_tag=$PARENT_TAG" >> $GITHUB_OUTPUT
+
+          # Save upstream release notes to a file
+          echo "$PARENT_BODY" > upstream_notes.md
+
+          # Check if this tag is already released in our repo
+          LOCAL_RELEASE_CHECK=$(gh api "repos/${{ github.repository }}/releases/tags/$PARENT_TAG" 2>/dev/null || echo "{}")
+          LOCAL_TAG=$(echo "$LOCAL_RELEASE_CHECK" | jq -r '.tag_name // empty')
+
+          FORCE_BUILD="${{ inputs.force_build }}"
+          if [ "$LOCAL_TAG" = "$PARENT_TAG" ] && [ "$FORCE_BUILD" != "true" ]; then
+            echo "Tag $PARENT_TAG is already released in ${{ github.repository }}."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "New upstream release detected ($PARENT_TAG)! Proceeding with BASA build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync Parent Updates & Preserve BASA Branding
+        if: steps.upstream_check.outputs.should_build == 'true'
+        env:
+          PARENT_REPO: ${{ inputs.parent_repo || 'kushagrasinghx/BitChord' }}
+          UPSTREAM_TAG: ${{ steps.upstream_check.outputs.upstream_tag }}
+        run: |
+          git config user.name "BASA Automation"
+          git config user.email "actions@github.com"
+
+          # Stash or backup BASA identity assets
+          mkdir -p /tmp/basa_assets
+          cp Logo.png /tmp/basa_assets/Logo.png 2>/dev/null || true
+          cp -r app/src/main/res/drawable/ic_logo.png /tmp/basa_assets/ 2>/dev/null || true
+          cp -r app/src/main/res/drawable/ic_launcher_foreground.png /tmp/basa_assets/ 2>/dev/null || true
+          cp -r app/src/main/res/drawable/ic_notification_logo.png /tmp/basa_assets/ 2>/dev/null || true
+          cp -r app/src/main/ic_launcher-playstore.png /tmp/basa_assets/ 2>/dev/null || true
+          cp -r app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt /tmp/basa_assets/ 2>/dev/null || true
+
+          # Fetch upstream
+          git remote add upstream "https://github.com/$PARENT_REPO.git" || true
+          git fetch upstream --tags
+
+          # Merge upstream tag or changes into current branch
+          git merge "tags/$UPSTREAM_TAG" --no-edit -X theirs || {
+            echo "Merge had conflicts, resolving with BASA priority..."
+          }
+
+          # Restore BASA identity files
+          cp /tmp/basa_assets/Logo.png Logo.png 2>/dev/null || true
+          cp /tmp/basa_assets/ic_logo.png app/src/main/res/drawable/ic_logo.png 2>/dev/null || true
+          cp /tmp/basa_assets/ic_launcher_foreground.png app/src/main/res/drawable/ic_launcher_foreground.png 2>/dev/null || true
+          cp /tmp/basa_assets/ic_notification_logo.png app/src/main/res/drawable/ic_notification_logo.png 2>/dev/null || true
+          cp /tmp/basa_assets/ic_launcher-playstore.png app/src/main/ic_launcher-playstore.png 2>/dev/null || true
+          cp /tmp/basa_assets/AppUpdateChecker.kt app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt 2>/dev/null || true
+
+          # Ensure app name in all strings.xml remains BASA
+          find app/src/main/res/values* -name "strings.xml" -exec sed -i 's/>BitChord</>BASA</g' {} +
+
+      - name: Set up JDK 17
+        if: steps.upstream_check.outputs.should_build == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Signing Keystore & Properties
+        if: steps.upstream_check.outputs.should_build == 'true'
+        run: |
+          echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
+          echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
+          echo "BASA_GITHUB_REPO=${{ github.repository }}" >> local.properties
+
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > basa-release.jks
+            echo "storeFile=basa-release.jks" > keystore.properties
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> keystore.properties
+            echo "keyAlias=${{ secrets.KEY_ALIAS || 'basa' }}" >> keystore.properties
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
+          fi
+
+      - name: Grant execute permission for gradlew
+        if: steps.upstream_check.outputs.should_build == 'true'
+        run: chmod +x gradlew
+
+      - name: Build BASA Release APKs
+        if: steps.upstream_check.outputs.should_build == 'true'
+        run: ./gradlew assembleProdRelease
+
+      - name: Prepare Release Assets
+        if: steps.upstream_check.outputs.should_build == 'true'
+        id: prepare_assets
+        env:
+          TAG: ${{ steps.upstream_check.outputs.upstream_tag }}
+        run: |
+          mkdir -p release_apks
+          APK_DIR="app/build/outputs/apk/prod/release"
+
+          for f in "$APK_DIR"/*.apk; do
+            [ -e "$f" ] || continue
+            filename=$(basename "$f")
+            # Create clean BASA asset names
+            if echo "$filename" | grep -qi "arm64"; then
+              cp "$f" "release_apks/BASA-${TAG}-arm64-v8a.apk"
+            elif echo "$filename" | grep -qi "universal"; then
+              cp "$f" "release_apks/BASA-${TAG}-universal.apk"
+            elif echo "$filename" | grep -qi "v7a"; then
+              cp "$f" "release_apks/BASA-${TAG}-armeabi-v7a.apk"
+            elif echo "$filename" | grep -qi "x86_64"; then
+              cp "$f" "release_apks/BASA-${TAG}-x86_64.apk"
+            else
+              cp "$f" "release_apks/BASA-${TAG}-${filename}"
+            fi
+          done
+
+          ls -la release_apks/
+
+      - name: Publish BASA GitHub Release
+        if: steps.upstream_check.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.upstream_check.outputs.upstream_tag }}
+        run: |
+          RELEASE_TITLE="BASA $TAG"
+
+          # Extract only What's New and strip GitHub, Discord, and BitChord details
+          python3 -c "
+          import re, sys
+
+          try:
+              with open('upstream_notes.md', 'r', encoding='utf-8', errors='ignore') as f:
+                  text = f.read()
+          except Exception:
+              text = ''
+
+          lines = text.splitlines()
+          kept = []
+          skipping = False
+
+          for line in lines:
+              trimmed = line.strip()
+              if trimmed.startswith('#'):
+                  header = trimmed.lstrip('#').strip().lower()
+                  if any(header.startswith(x) for x in ['install', 'download', 'desktop', 'asset', 'contributor', 'support', 'discord', 'github']):
+                      skipping = True
+                      continue
+                  else:
+                      skipping = False
+              if skipping:
+                  continue
+              if trimmed.startswith('![') and '](' in trimmed and trimmed.endswith(')'):
+                  continue
+              if any(x in trimmed.lower() for x in ['discord.gg', 'discord.com/invite', 'support channel', 'discord']):
+                  continue
+              if any(x in trimmed.lower() for x in ['github.com', 'full list of changes', 'full changelog', 'pull request']):
+                  continue
+              if any(trimmed.lower().startswith(x) for x in ['**android', '**ios', '**macos', '**windows', '**linux']):
+                  continue
+              if any(trimmed.lower().endswith(x) for x in ['.apk', '.apk`', '.dmg', '.dmg`', '.exe', '.deb', '.rpm']):
+                  continue
+
+              line = re.sub(r'\[([^\]]+)\]\(https?://github\.com[^)]*\)', r'\1', line)
+              line = re.sub(r'\[([^\]]+)\]\(https?://discord[^)]*\)', r'\1', line)
+              line = re.sub(r'\(\s*https?://github\.com/\S+\s*\)', '', line)
+              line = re.sub(r'\(\s*https?://discord\.(?:gg|com)/\S+\s*\)', '', line)
+              line = re.sub(r'https?://github\.com/\S+', '', line)
+              line = re.sub(r'https?://discord\.(?:gg|com)/\S+', '', line)
+              line = line.replace('BitChord', 'BASA').replace('bitchord', 'basa').replace('BITCHORD', 'BASA')
+              kept.append(line)
+
+          res = '\n'.join(kept).strip()
+          res = re.sub(r'\n{3,}', '\n\n', res)
+
+          with open('clean_notes.md', 'w', encoding='utf-8') as f:
+              f.write(res)
+          "
+
+          # Formulate release notes with only What's New
+          cat <<EOF > release_notes.md
+          # BASA $TAG
+
+          $(cat clean_notes.md 2>/dev/null || echo "Latest improvements and bug fixes.")
+          EOF
+
+          # Create the release and upload the BASA APKs
+          gh release create "$TAG" release_apks/*.apk \
+            --title "$RELEASE_TITLE" \
+            --notes-file release_notes.md

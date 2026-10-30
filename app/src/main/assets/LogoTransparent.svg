@@ -1,0 +1,18 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="basaGradientTrans" x1="200" y1="100" x2="800" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4E95FF"/>
+      <stop offset="35%" stop-color="#FF9E4A"/>
+      <stop offset="70%" stop-color="#B25AFF"/>
+      <stop offset="100%" stop-color="#2D72FF"/>
+    </linearGradient>
+    <radialGradient id="sphereGradTrans" cx="500" cy="520" r="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6AA9FF"/>
+      <stop offset="60%" stop-color="#FF8A65"/>
+      <stop offset="100%" stop-color="#2B1055"/>
+    </radialGradient>
+  </defs>
+  <path d="M 370 170 C 350 260 350 440 400 480 C 470 530 650 510 730 430 C 760 400 750 460 700 520 C 600 640 460 670 380 620 C 320 570 330 460 340 370 C 350 270 370 170 370 170 Z" fill="url(#basaGradientTrans)" opacity="0.95"/>
+  <circle cx="512" cy="530" r="75" fill="url(#sphereGradTrans)"/>
+  <text x="512" y="800" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="70" letter-spacing="18" fill="#FFFFFF">BASA</text>
+</svg>
