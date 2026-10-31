@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.replay
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -145,11 +146,12 @@ fun ReplayCreditCard(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(10.dp))
-                Icon(
+                Image(
                     painter = painterResource(Res.drawable.ic_logo),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(width = 34.dp, height = 22.dp),
+                    contentDescription = "BASA",
+                    modifier = Modifier
+                        .height(24.dp)
+                        .width((24f * 450f / 560f).dp),
                 )
             }
 

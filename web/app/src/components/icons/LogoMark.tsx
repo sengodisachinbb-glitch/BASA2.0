@@ -9,7 +9,7 @@ export function LogoMark({ size = 20, className }: { size?: number; className?: 
     <span
       aria-hidden="true"
       className={className}
-      style={{ display: 'inline-flex', width: size, height: (size * 484) / 730 }}
+      style={{ display: 'inline-flex', width: size, height: (size * 560) / 450 }}
       dangerouslySetInnerHTML={{ __html: markup }}
     />
   );

@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.replay
 
+import androidx.compose.foundation.Image
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -413,15 +414,16 @@ private fun StoryChrome(
                 modifier = Modifier.weight(1f),
             )
             // The mark and the word together, the way the card carries it.
-            Icon(
+            Image(
                 painter = painterResource(R.drawable.ic_logo),
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.size(width = 26.dp, height = 17.dp),
+                contentDescription = "BASA",
+                modifier = Modifier
+                    .height(20.dp)
+                    .width((20f * 450f / 560f).dp),
             )
             Spacer(Modifier.width(7.dp))
             Text(
-                text = "BitChord",
+                text = "BASA",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.W700,
                 color = Color.White.copy(alpha = 0.9f),

@@ -221,8 +221,10 @@ private fun ColumnScope.NamePage(
             Spacer(Modifier.height(56.dp))
             Image(
                 painter = painterResource(Res.drawable.ic_logo),
-                contentDescription = null,
-                modifier = Modifier.size(width = 46.dp, height = 30.dp),
+                contentDescription = "BASA",
+                modifier = Modifier
+                    .height(44.dp)
+                    .width((44f * 450f / 560f).dp),
             )
         }
     }

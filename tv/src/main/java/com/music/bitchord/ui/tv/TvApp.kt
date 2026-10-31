@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.tv
 
+import androidx.compose.foundation.Image
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -559,14 +560,13 @@ private fun TvTopBar(
             .padding(top = 18.dp, start = 38.dp, end = 38.dp),
     ) {
         // The mark only, as the phone's Home heading shows it.
-        Icon(
+        Image(
             painter = painterResource(R.drawable.ic_logo),
             contentDescription = "BASA",
-            tint = TvGlass.TextPrimary,
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .height(21.dp)
-                .aspectRatio(730f / 484f),
+                .height(26.dp)
+                .aspectRatio(450f / 560f),
         )
         TvAvatarButton(
             imageUrl = if (signedIn) avatarUrl else null,
@@ -662,15 +662,14 @@ fun TvAppMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp =
             .size(size)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(size * 0.225f))
             .background(
-                Brush.linearGradient(listOf(Color(0xFFFF5468), Color(0xFFE3173A))),
+                SolidColor(Color.Black),
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
+        Image(
             painter = painterResource(R.drawable.ic_logo),
             contentDescription = "BASA",
-            tint = Color.White,
-            modifier = Modifier.size(size * 0.52f),
+            modifier = Modifier.size(size * 0.65f),
         )
     }
 }
