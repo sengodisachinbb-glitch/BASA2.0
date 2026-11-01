@@ -662,7 +662,7 @@ fun TvAppMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp =
             .size(size)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(size * 0.225f))
             .background(
-                SolidColor(Color.Black),
+                Color.Black,
             ),
         contentAlignment = Alignment.Center,
     ) {

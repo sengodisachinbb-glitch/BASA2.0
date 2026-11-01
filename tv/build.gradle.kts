@@ -52,6 +52,14 @@ val listenTogetherServer: String = (
         ?: "https://bitchord-listen-together.onrender.com"
     ).trim().trimEnd('/')
 
+val basaGithubRepo: String = (
+    localProps.getProperty("BASA_GITHUB_REPO")
+        ?: System.getenv("BASA_GITHUB_REPO")
+        ?: "sengodisachinbb-glitch/BASA2.0"
+    ).trim()
+
+base.archivesName.set("BASA-TV")
+
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the
@@ -99,7 +107,8 @@ android {
         // apart by name (BitChordTV-v1.8.apk, BitChordTV-v1.8_x86_64.apk), so
         // the updater installs the TV app here, never the phone app. See
         // AppUpdateChecker.apkAssetUrl.
-        buildConfigField("String", "UPDATE_APK_PREFIX", "\"BitChordTV-\"")
+        buildConfigField("String", "BASA_GITHUB_REPO", "\"" + basaGithubRepo + "\"")
+        buildConfigField("String", "UPDATE_APK_PREFIX", "\"BASA-TV-\"")
     }
 
     splits {
