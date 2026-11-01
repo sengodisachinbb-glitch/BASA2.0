@@ -27,13 +27,23 @@ jobs:
         echo "LISTEN_TOGETHER_SERVER=${{ secrets.LISTEN_TOGETHER_SERVER }}" >> local.properties
         echo "BASA_GITHUB_REPO=sengodisachinbb-glitch/BASA2.0" >> local.properties
 
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > basa-release.jks
-        {
-          echo "storeFile=basa-release.jks"
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}"
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
-        } > keystore.properties
+        if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > basa-release.jks
+          {
+            echo "storeFile=basa-release.jks"
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+          } > keystore.properties
+        else
+          keytool -genkeypair -v -keystore basa-release.jks -alias basa -keyalg RSA -keysize 2048 -validity 10000 -storepass basapassword -keypass basapassword -dname "CN=BASA, OU=BASA, O=BASA, L=Unknown, ST=Unknown, C=US"
+          {
+            echo "storeFile=basa-release.jks"
+            echo "storePassword=basapassword"
+            echo "keyAlias=basa"
+            echo "keyPassword=basapassword"
+          } > keystore.properties
+        fi
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
