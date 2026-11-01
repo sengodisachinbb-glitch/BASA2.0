@@ -83,11 +83,10 @@ object InnertubeParser {
             topResults.forEach { result ->
                 when (result) {
                     is SearchResult.TopTrack -> {
-                        // The promoted top track from musicCardShelfRenderer is YouTube's #1 answer
-                        // for the query. Allow it through, especially when matching promoted songs.
-                        val isPromoted = result.song.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
-                            PromotedSongs.matchesAnnaNagar(result.song.title)
-                        if ((!result.song.isVideo || isPromoted || !includeVideos) && seen.add("v:${result.song.videoId}")) {
+                        // The mixed All page stays music-only; music-video uploads
+                        // belong exclusively to the dedicated Videos tab, except only for this particular song.
+                        val isSpecialTrack = result.song.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+                        if ((!result.song.isVideo || isSpecialTrack) && seen.add("v:${result.song.videoId}")) {
                             add(result)
                         }
                     }
@@ -108,10 +107,9 @@ object InnertubeParser {
                     val fallback = cardCredits.firstOrNull { it.first === renderer }?.second
                     parseResponsiveListItem(renderer, fallback ?: Credits())?.let { song ->
                         // The mixed All page stays music-only; the dedicated Videos
-                        // filter is the one place music-video uploads belong.
-                        val isPromoted = song.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
-                            PromotedSongs.matchesAnnaNagar(song.title)
-                        if ((song.isVideo == includeVideos || isPromoted) && seen.add("v:${song.videoId}")) {
+                        // filter is the one place music-video uploads belong, except only for this particular song.
+                        val isSpecialTrack = song.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+                        if ((song.isVideo == includeVideos || isSpecialTrack) && seen.add("v:${song.videoId}")) {
                             add(SearchResult.Track(song))
                         }
                     }

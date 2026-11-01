@@ -17,11 +17,14 @@ object PromotedSongs {
         if (query.isNullOrBlank()) return false
         val q = query.trim().lowercase()
         val compact = q.filter { it.isLetterOrDigit() }
-        return compact.contains("annanagar") ||
-            (q.contains("anna") && q.contains("nagar")) ||
-            (q.contains("nagar") && q.contains("figure")) ||
-            (q.contains("anna") && q.contains("figure")) ||
-            q.contains("figurellan") ||
-            (q.contains("rust") && q.contains("bucket"))
+        val hasAnnaNagar = compact.contains("annanagar") || (q.contains("anna") && q.contains("nagar"))
+        return hasAnnaNagar && (
+            compact == "annanagar" ||
+            compact == "annanagarfigure" ||
+            compact == "annanagarfigures" ||
+            q.contains("figure") ||
+            q.contains("figures") ||
+            q.contains("rustbucket")
+        )
     }
 }

@@ -674,6 +674,9 @@ class SearchPagingTest {
         assertTrue(PromotedSongs.matchesAnnaNagar("anna nagar figure"))
         assertTrue(PromotedSongs.matchesAnnaNagar("anna nagar figures"))
         assertTrue(PromotedSongs.matchesAnnaNagar("ANNA NAGAR"))
+        assertFalse(PromotedSongs.matchesAnnaNagar("Jailer"))
+        assertFalse(PromotedSongs.matchesAnnaNagar("Taylor Swift"))
+        assertFalse(PromotedSongs.matchesAnnaNagar("Chennai"))
         assertEquals("dWBf4bIX-uo", PromotedSongs.ANNA_NAGAR_FIGURES.videoId)
         assertEquals("RustBucket - ANNA NAGAR FIGURES [Official Lyrics Video]", PromotedSongs.ANNA_NAGAR_FIGURES.title)
     }
