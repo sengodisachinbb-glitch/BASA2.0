@@ -17,6 +17,7 @@ import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.MoodGenreSection
 import com.music.bitchord.data.model.playlistMoves
 import com.music.bitchord.data.model.PlaylistPrivacy
+import com.music.bitchord.data.model.PromotedSongs
 import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.ShelfItem
@@ -299,7 +300,23 @@ object YtMusicRepository {
                 Innertube.search(query, filter.params, anonymous),
                 includeVideos = filter == SearchFilter.VIDEOS,
             ).let { page ->
-                SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+                val rows = if (PromotedSongs.matchesAnnaNagar(query) && (filter == SearchFilter.ALL || filter == SearchFilter.SONGS || filter == SearchFilter.VIDEOS)) {
+                    val existingIndex = page.rows.indexOfFirst {
+                        (it as? SearchResult.Track)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
+                        (it as? SearchResult.TopTrack)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+                    }
+                    val topRow = if (existingIndex >= 0) {
+                        val item = page.rows[existingIndex]
+                        if (item is SearchResult.Track) SearchResult.TopTrack(item.song) else item
+                    } else {
+                        SearchResult.TopTrack(PromotedSongs.ANNA_NAGAR_FIGURES)
+                    }
+                    val remaining = page.rows.filterIndexed { index, _ -> index != existingIndex }
+                    listOf(topRow) + remaining
+                } else {
+                    page.rows
+                }
+                SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
             }
         }
 
@@ -333,7 +350,13 @@ object YtMusicRepository {
      */
     suspend fun searchSuggestions(input: String): Result<List<String>> =
         call("suggest") {
-            InnertubeParser.parseSearchSuggestions(Innertube.searchSuggestions(input))
+            val suggestions = InnertubeParser.parseSearchSuggestions(Innertube.searchSuggestions(input))
+            if (PromotedSongs.matchesAnnaNagar(input)) {
+                val promoted = listOf("anna nagar figures", "anna nagar figure", "RustBucket - ANNA NAGAR FIGURES")
+                (promoted + suggestions).distinct()
+            } else {
+                suggestions
+            }
         }
 
     /**
@@ -354,7 +377,23 @@ object YtMusicRepository {
                 Innertube.searchTypeahead(input),
                 includeVideos = false,
             ).let { page ->
-                SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+                val rows = if (PromotedSongs.matchesAnnaNagar(input)) {
+                    val existingIndex = page.rows.indexOfFirst {
+                        (it as? SearchResult.Track)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
+                        (it as? SearchResult.TopTrack)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+                    }
+                    val topRow = if (existingIndex >= 0) {
+                        val item = page.rows[existingIndex]
+                        if (item is SearchResult.Track) SearchResult.TopTrack(item.song) else item
+                    } else {
+                        SearchResult.TopTrack(PromotedSongs.ANNA_NAGAR_FIGURES)
+                    }
+                    val remaining = page.rows.filterIndexed { index, _ -> index != existingIndex }
+                    listOf(topRow) + remaining
+                } else {
+                    page.rows
+                }
+                SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
             }
         }
 

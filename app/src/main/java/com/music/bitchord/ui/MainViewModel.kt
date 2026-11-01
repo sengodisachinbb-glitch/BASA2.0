@@ -45,6 +45,7 @@ import com.music.bitchord.data.model.MoodGenre
 import com.music.bitchord.data.model.MoodGenreSection
 import com.music.bitchord.data.model.PlaylistPrivacy
 import com.music.bitchord.data.model.SearchFilter
+import com.music.bitchord.data.model.PromotedSongs
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.ShelfItem
 import com.music.bitchord.data.model.Song
@@ -2171,8 +2172,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // whether it succeeded or failed.
                 if (request.requestId != newestRequestId.get()) return@collectLatest
                 _results.value = result.fold(
-                    onSuccess = { page -> published(page, key, request.requestId) },
-                    onFailure = { failure -> UiState.Error(failure.friendly()) },
+                    onSuccess = { page -> published(page, key, request.requestId, request.query) },
+                    onFailure = { failure ->
+                        if (PromotedSongs.matchesAnnaNagar(request.query)) {
+                            published(YtMusicRepository.SearchPage(listOf(SearchResult.TopTrack(PromotedSongs.ANNA_NAGAR_FIGURES)), null), key, request.requestId, request.query)
+                        } else {
+                            UiState.Error(failure.friendly())
+                        }
+                    },
                 )
             }
     }
@@ -2237,8 +2244,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ?: return@collectLatest
                 // Asked again on the way back; the field is live throughout.
                 if (!stillWanted(input)) return@collectLatest
-                _suggestions.value = listOf(input) +
+                val base = listOf(input) +
                     fetched.filterNot { it.equals(input, ignoreCase = true) }
+                _suggestions.value = if (PromotedSongs.matchesAnnaNagar(input)) {
+                    val promoted = listOf("anna nagar figures", "anna nagar figure", "RustBucket - ANNA NAGAR FIGURES")
+                    (promoted + base).distinct()
+                } else {
+                    base
+                }
             }
     }
 
@@ -2272,7 +2285,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     return@collectLatest
                 }
                 // Cap results so the dropdown doesn't grow unbounded.
-                _typeaheadResults.value = result?.rows.orEmpty().take(TYPEAHEAD_MAX_RESULTS)
+                val rawRows = result?.rows.orEmpty()
+                val finalRows = if (PromotedSongs.matchesAnnaNagar(input)) {
+                    val existingIndex = rawRows.indexOfFirst {
+                        (it as? SearchResult.Track)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
+                        (it as? SearchResult.TopTrack)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+                    }
+                    val topRow = if (existingIndex >= 0) {
+                        val item = rawRows[existingIndex]
+                        if (item is SearchResult.Track) SearchResult.TopTrack(item.song) else item
+                    } else {
+                        SearchResult.TopTrack(PromotedSongs.ANNA_NAGAR_FIGURES)
+                    }
+                    val remaining = rawRows.filterIndexed { idx, _ -> idx != existingIndex }
+                    listOf(topRow) + remaining
+                } else {
+                    rawRows
+                }
+                _typeaheadResults.value = finalRows.take(TYPEAHEAD_MAX_RESULTS)
             }
     }
 
@@ -2281,8 +2311,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         page: YtMusicRepository.SearchPage,
         key: String,
         requestId: Long,
+        query: String = "",
     ): UiState<List<SearchResult>> {
-        val rows = page.rows
+        val baseRows = page.rows
+        val rows = if (PromotedSongs.matchesAnnaNagar(query) || PromotedSongs.matchesAnnaNagar(_query.value)) {
+            val existingIndex = baseRows.indexOfFirst {
+                (it as? SearchResult.Track)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId ||
+                (it as? SearchResult.TopTrack)?.song?.videoId == PromotedSongs.ANNA_NAGAR_FIGURES.videoId
+            }
+            val topRow = if (existingIndex >= 0) {
+                val item = baseRows[existingIndex]
+                if (item is SearchResult.Track) SearchResult.TopTrack(item.song) else item
+            } else {
+                SearchResult.TopTrack(PromotedSongs.ANNA_NAGAR_FIGURES)
+            }
+            val remaining = baseRows.filterIndexed { idx, _ -> idx != existingIndex }
+            listOf(topRow) + remaining
+        } else {
+            baseRows
+        }
         if (rows.isEmpty()) return UiState.Error(text(R.string.no_results))
         searchCache.put(key, SearchCacheEntry(rows, page.continuation))
         searchSession = SearchSession(key, requestId, _filter.value, page.continuation)

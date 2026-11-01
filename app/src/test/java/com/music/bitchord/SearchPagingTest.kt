@@ -4,6 +4,7 @@ import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.data.model.ArtistNameIndex
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchResult
+import com.music.bitchord.data.model.PromotedSongs
 import com.music.bitchord.data.model.ShelfItem
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -666,5 +667,14 @@ class SearchPagingTest {
         )
 
         assertEquals(listOf("PLROAD"), playlists.map { it.playlistId })
+    }
+
+    @Test
+    fun `anna nagar figure query promotes exact RustBucket track first`() {
+        assertTrue(PromotedSongs.matchesAnnaNagar("anna nagar figure"))
+        assertTrue(PromotedSongs.matchesAnnaNagar("anna nagar figures"))
+        assertTrue(PromotedSongs.matchesAnnaNagar("ANNA NAGAR"))
+        assertEquals("dWBf4bIX-uo", PromotedSongs.ANNA_NAGAR_FIGURES.videoId)
+        assertEquals("RustBucket - ANNA NAGAR FIGURES [Official Lyrics Video]", PromotedSongs.ANNA_NAGAR_FIGURES.title)
     }
 }
