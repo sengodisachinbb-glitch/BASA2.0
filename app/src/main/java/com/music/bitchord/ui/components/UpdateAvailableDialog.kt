@@ -11,10 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -89,6 +94,7 @@ fun UpdateAvailableDialog(
     onCancelDownload: () -> Unit,
     onInstall: () -> Unit,
     onOpenReleasePage: () -> Unit = {},
+    onMinimize: () -> Unit = onDismiss,
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -99,14 +105,14 @@ fun UpdateAvailableDialog(
         modifier = modifier
             .fillMaxSize()
             .background(SCRIM_COLOR)
-            // Tapping the scrim reads the same as Remind Me Later — nothing
+            // Tapping the scrim reads the same as Remind Me Later / Minimise — nothing
             // about this update is mandatory, so backing out of it should be as
-            // easy as getting into it. Mid-download it only closes the sheet;
-            // the download keeps going and the top-bar icon reopens this.
+            // easy as getting into it. Mid-download it closes the sheet;
+            // the download keeps going in the background and the top-bar icon reopens this.
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
-                onClick = onDismiss,
+                onClick = onMinimize,
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -138,15 +144,31 @@ fun UpdateAvailableDialog(
                     .padding(horizontal = 16.dp, vertical = 19.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = stringResource(R.string.software_update),
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.W600,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.software_update),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.W600,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().align(Alignment.Center),
+                    )
+                    IconButton(
+                        onClick = onMinimize,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.CenterEnd),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.minimise),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
                 Text(
                     text = when (state) {
                         is AppUpdateChecker.DownloadState.Downloading ->
@@ -189,6 +211,19 @@ fun UpdateAvailableDialog(
                                     .background(MaterialTheme.colorScheme.primary),
                             )
                         }
+                    }
+                    if (downloading != null) {
+                        val percent = (downloading.fraction * 100).toInt().coerceIn(0, 100)
+                        Text(
+                            text = "$percent%",
+                            modifier = Modifier.padding(top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
                 if (state is AppUpdateChecker.DownloadState.Failed) {
@@ -242,6 +277,8 @@ fun UpdateAvailableDialog(
             AlertRule()
             when (state) {
                 is AppUpdateChecker.DownloadState.Downloading -> {
+                    AlertAction(label = stringResource(R.string.minimise), emphasised = true, onClick = onMinimize)
+                    AlertRule()
                     AlertAction(label = stringResource(R.string.cancel), emphasised = false, onClick = onCancelDownload)
                 }
                 is AppUpdateChecker.DownloadState.Ready -> {

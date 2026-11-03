@@ -5,10 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.music.bitchord.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -40,7 +43,7 @@ object AppUpdateChecker {
         val notes: String?,
     )
 
-    private const val CACHE_SUBDIR = "updates"
+    const val CACHE_SUBDIR = "updates"
 
     fun getReleaseApiUrl(): String? {
         val repo = com.music.bitchord.data.settings.AppSettings.getEffectiveUpdateRepo()
@@ -66,11 +69,29 @@ object AppUpdateChecker {
     private val _download = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val download = _download.asStateFlow()
 
+    /** Triggered when an update notification or intent requests showing the update dialog. */
+    private val _showDialogTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val showDialogTrigger = _showDialogTrigger.asSharedFlow()
+
+    fun triggerShowUpdateDialog() {
+        _showDialogTrigger.tryEmit(Unit)
+    }
+
     /** Set from the UI thread when the user cancels; polled between network reads. */
     @Volatile
     private var downloadCancelled = false
 
-    suspend fun check() = withContext(Dispatchers.IO) {
+    fun isDownloadCancelled(): Boolean = downloadCancelled
+
+    fun setDownloadCancelled(cancelled: Boolean) {
+        downloadCancelled = cancelled
+    }
+
+    fun setDownloadState(state: DownloadState) {
+        _download.value = state
+    }
+
+    suspend fun check(context: Context? = null) = withContext(Dispatchers.IO) {
         val apiUrl = getReleaseApiUrl() ?: return@withContext
         runCatching {
             val request = Request.Builder().url(apiUrl).build()
@@ -86,6 +107,14 @@ object AppUpdateChecker {
             val latest = tag.removePrefix("v")
             if (isNewer(latest, BuildConfig.VERSION_NAME) && apkUrl != null) {
                 _available.value = UpdateInfo(latest, url, apkUrl, notes)
+                if (context != null && !AppUpdateService.isRunning) {
+                    val dir = File(context.cacheDir, CACHE_SUBDIR)
+                    val target = File(dir, "basa-$latest.apk")
+                    val readyMarker = File(dir, "basa-$latest.apk.ready")
+                    if (target.exists() && readyMarker.exists() && target.length() > 0) {
+                        _download.value = DownloadState.Ready(target)
+                    }
+                }
             }
         }
     }
@@ -198,13 +227,27 @@ object AppUpdateChecker {
     }
 
     /**
-     * Wipes any APK left over from a previous run. Called once at cold start
-     * so a downloaded update is only ever "Install Now" for the session that
-     * downloaded it — the next launch starts clean rather than trying to work
-     * out whether a leftover file is still good.
+     * Wipes any APK left over from an old run. Preserves an in-progress or completed
+     * download matching the current available version so background updates survive restarts.
      */
     suspend fun clearCache(context: Context) = withContext(Dispatchers.IO) {
-        File(context.cacheDir, CACHE_SUBDIR).listFiles()?.forEach { it.delete() }
+        if (AppUpdateService.isRunning) return@withContext
+        val dir = File(context.cacheDir, CACHE_SUBDIR)
+        val files = dir.listFiles() ?: return@withContext
+        val latest = _available.value?.version
+        for (file in files) {
+            if (latest != null && file.name == "basa-$latest.apk" && file.length() > 0) {
+                val marker = File(dir, "basa-$latest.apk.ready")
+                if (marker.exists()) {
+                    _download.value = DownloadState.Ready(file)
+                    continue
+                }
+            }
+            if (latest != null && file.name == "basa-$latest.apk.ready") {
+                continue
+            }
+            file.delete()
+        }
     }
 
     /**
@@ -254,68 +297,67 @@ object AppUpdateChecker {
     }.getOrNull()
 
     /**
-     * Streams the current update's APK into the app cache, reporting progress
-     * through [download]. A finished file survives a cancelled dialog: until
-     * the state is reset, "Install Now" comes straight back without a second
-     * download.
+     * Starts the background update service so the download runs in a foreground service
+     * with wake lock, continuing even if the app closes or the mobile sleeps.
      */
-    suspend fun downloadApk(context: Context): Unit = withContext(Dispatchers.IO) {
-        val info = _available.value ?: return@withContext
-        val url = info.apkUrl ?: return@withContext
+    fun startDownload(context: Context) {
+        val info = _available.value ?: return
+        val url = info.apkUrl ?: return
         downloadCancelled = false
         _download.value = DownloadState.Downloading(0f)
-
-        runCatching {
-            val dir = File(context.cacheDir, CACHE_SUBDIR).apply { mkdirs() }
-            // Drop anything left over from an earlier attempt.
-            dir.listFiles()?.forEach { it.delete() }
-            val target = File(dir, "basa-${info.version}.apk")
-
-            val request = Request.Builder().url(url).build()
-            Http.client.newCall(request).execute().use { response ->
-                check(response.isSuccessful) { "Download failed: HTTP ${response.code}" }
-                val body = response.body ?: error("Empty download body")
-                val total = body.contentLength().takeIf { it > 0 }
-
-                body.byteStream().use { input ->
-                    target.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var readTotal = 0L
-                        while (true) {
-                            if (downloadCancelled) {
-                                _download.value = DownloadState.Idle
-                                return@withContext
-                            }
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
-                            readTotal += read
-                            total?.let {
-                                _download.value =
-                                    DownloadState.Downloading((readTotal.toFloat() / it).coerceIn(0f, 1f))
-                            }
-                        }
-                    }
-                }
-            }
-            _download.value = DownloadState.Ready(target)
-        }.onFailure { error ->
-            _download.value = if (downloadCancelled) {
-                DownloadState.Idle
-            } else {
-                DownloadState.Failed(error.message ?: "Download failed")
-            }
+        val intent = Intent(context, AppUpdateService::class.java).apply {
+            action = AppUpdateService.ACTION_START
+            putExtra(AppUpdateService.EXTRA_URL, url)
+            putExtra(AppUpdateService.EXTRA_VERSION, info.version)
         }
+        ContextCompat.startForegroundService(context, intent)
     }
 
-    /** Stops an in-flight download; the next read loop sees this and bails. */
-    fun cancelDownload() {
+    /**
+     * Backward-compatible coroutine helper that triggers the background download service.
+     */
+    suspend fun downloadApk(context: Context) {
+        startDownload(context)
+    }
+
+    /** Stops an in-flight download and cancels the background update service. */
+    @JvmOverloads
+    fun cancelDownload(context: Context? = null) {
         downloadCancelled = true
+        _download.value = DownloadState.Idle
+        context?.let { ctx ->
+            val intent = Intent(ctx, AppUpdateService::class.java).apply {
+                action = AppUpdateService.ACTION_CANCEL
+            }
+            ctx.startService(intent)
+        }
     }
 
     /** Back to square one after a failure, so the dialog offers Download again. */
     fun resetDownload() {
         _download.value = DownloadState.Idle
+    }
+
+    /**
+     * Builds the Intent to hand a downloaded APK to the system package installer.
+     */
+    fun getInstallIntent(context: Context, file: File): Intent {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            return Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        return Intent(Intent.ACTION_INSTALL_PACKAGE)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            .putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            .addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_ACTIVITY_NEW_TASK,
+            )
     }
 
     /**
@@ -328,29 +370,10 @@ object AppUpdateChecker {
      * launched anyway and shows its own "not allowed" prompt with a way in.
      */
     fun installApk(context: Context, file: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !context.packageManager.canRequestPackageInstalls()
-        ) {
-            val opened = runCatching {
-                context.startActivity(
-                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                        .setData(Uri.parse("package:${context.packageName}"))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }.isSuccess
-            if (opened) return
+        runCatching {
+            val intent = getInstallIntent(context, file)
+            context.startActivity(intent)
         }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        context.startActivity(
-            Intent(Intent.ACTION_INSTALL_PACKAGE)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                .putExtra(Intent.EXTRA_RETURN_RESULT, true)
-                .addFlags(
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        Intent.FLAG_ACTIVITY_NEW_TASK,
-                ),
-        )
     }
 
     /** A version split into its numeric dotted parts and whether it carries a "-suffix" (e.g. "-beta2"). */

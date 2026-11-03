@@ -365,6 +365,9 @@ class MainActivity : AppCompatActivity() {
         JamInviteLink.consume(intent)
         // Likewise for a link tapped or shared from another app — see [MusicLink].
         MusicLink.consume(intent)
+        if (intent?.getBooleanExtra(com.music.bitchord.data.AppUpdateService.EXTRA_SHOW_UPDATE_DIALOG, false) == true) {
+            com.music.bitchord.data.AppUpdateChecker.triggerShowUpdateDialog()
+        }
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
@@ -460,6 +463,9 @@ class MainActivity : AppCompatActivity() {
         PlayerDeepLink.consume(intent)
         JamInviteLink.consume(intent)
         MusicLink.consume(intent)
+        if (intent.getBooleanExtra(com.music.bitchord.data.AppUpdateService.EXTRA_SHOW_UPDATE_DIALOG, false)) {
+            com.music.bitchord.data.AppUpdateChecker.triggerShowUpdateDialog()
+        }
     }
 }
 
@@ -742,6 +748,11 @@ private fun BitChordApp(
     LaunchedEffect(updateNotice) {
         if (updateNotice != null && !updateDialogShown) {
             updateDialogShown = true
+            showUpdateDialog = true
+        }
+    }
+    LaunchedEffect(Unit) {
+        com.music.bitchord.data.AppUpdateChecker.showDialogTrigger.collect {
             showUpdateDialog = true
         }
     }
@@ -4859,13 +4870,13 @@ private fun BitChordApp(
                     onDismiss = { showUpdateDialog = false },
                     onDownload = {
                         if (update.apkUrl != null) {
-                            scope.launch { AppUpdateChecker.downloadApk(context) }
+                            AppUpdateChecker.startDownload(context)
                         } else {
                             showUpdateDialog = false
                         }
                     },
                     onCancelDownload = {
-                        AppUpdateChecker.cancelDownload()
+                        AppUpdateChecker.cancelDownload(context)
                     },
                     onInstall = {
                         val ready = AppUpdateChecker.download.value as? AppUpdateChecker.DownloadState.Ready
@@ -4873,6 +4884,9 @@ private fun BitChordApp(
                     },
                     onOpenReleasePage = {
                         AppUpdateChecker.resetDownload()
+                        showUpdateDialog = false
+                    },
+                    onMinimize = {
                         showUpdateDialog = false
                     },
                 )

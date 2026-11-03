@@ -153,6 +153,13 @@
     <string name="try_again">Try Again</string>
     <string name="open_releases_page">Open Releases Page</string>
     <string name="whats_new">What’s new</string>
+    <string name="minimise">Minimise</string>
+    <string name="update_channel_name">App Updates</string>
+    <string name="update_channel_description">Notifications for software updates</string>
+    <string name="update_notification_title">Downloading BASA %1$s</string>
+    <string name="update_notification_ready_title">BASA %1$s update ready</string>
+    <string name="update_notification_ready_text">Tap to install the update</string>
+    <string name="update_notification_failed_title">BASA update failed</string>
     <string name="log_copied">Log copied · %1$d lines</string>
     <string name="sign_in_youtube_music">Sign in to YouTube Music</string>
     <string name="choose_a_channel">Choose a channel</string>

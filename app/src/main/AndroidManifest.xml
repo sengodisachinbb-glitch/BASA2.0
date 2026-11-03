@@ -479,6 +479,14 @@
             android:foregroundServiceType="dataSync" />
 
         <!--
+          In-app software update downloads.
+        -->
+        <service
+            android:name=".data.AppUpdateService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!--
           Home-screen widgets. Two providers so the picker lists a 2×2 and a 4×2,
           both of which are the same widget resized — see MediaWidget.
 
